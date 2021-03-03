@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -18,7 +19,7 @@ import (
 
 // Pathentry to store file/folder attributes
 type pathEntryDetails struct {
-	Path        string    `json:"path"`
+	Fullpath    string    `json:"path"`
 	IsDir       bool      `json:"isdirectory"`
 	Name        string    `json:"name"`
 	Permissions string    `json:"permissions"`
@@ -40,6 +41,7 @@ type healthResponse struct {
 
 var lastActivity time.Time
 var originalRootDir string
+var pathSeparator string
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the HomePage!")
@@ -237,7 +239,7 @@ func fileStat(path string) (pathEntryDetails, error) {
 
 	wd, _ := os.Getwd()
 
-	details.Path = wd + "\\" + path
+	details.Fullpath = wd + pathSeparator + path
 	details.IsDir = fileStat.IsDir()
 	details.Name = fileStat.Name()
 	details.Permissions = fileStat.Mode().String()
@@ -250,6 +252,11 @@ func fileStat(path string) (pathEntryDetails, error) {
 func main() {
 	wd, _ := os.Getwd()
 	originalRootDir = wd
+
+	if runtime.GOOS == "windows" {
+		pathSeparator = "\\"
+	}
+
 	//fmt.Println("Application started.\nVersion=" + os.Getenv("VERSION"))
 	fmt.Println(time.Now().String() + ": Application started.\nVersion=1.0")
 
