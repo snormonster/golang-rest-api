@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -16,11 +19,11 @@ import (
 // Pathentry to store file/folder attributes
 type pathEntryDetails struct {
 	Path        string    `json:"path"`
-	Filename    string    `json:"filename"`
+	IsDir       bool      `json:"isdirectory"`
+	Name        string    `json:"name"`
 	Permissions string    `json:"permissions"`
 	Size        int64     `json:"size"`
 	LastMod     time.Time `json:"lastmodified"`
-	IsDir       bool      `json:"isdirectory"`
 }
 
 type failedResponse struct {
@@ -36,6 +39,7 @@ type healthResponse struct {
 }
 
 var lastActivity time.Time
+var originalRootDir string
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the HomePage!")
@@ -50,7 +54,7 @@ func handleRequests() {
 
 	myRouter.HandleFunc("/", homePage)
 	myRouter.HandleFunc("/ls/", returnDirectoryListingAtPath).Queries("path", "").Methods("GET")
-	//myRouter.HandleFunc("/ls/", returnCurrentDirectoryListing)
+	myRouter.HandleFunc("/ls/", returnDirectoryListingAtPath)
 	//myRouter.HandleFunc("/article/", returnSingleArticle).Methods("GET").Queries("foo", "bar", "id", "{id:[0-9]+}")
 	myRouter.HandleFunc("/test/", printpathtest).Queries("foo", "").Methods("GET")
 	myRouter.HandleFunc("/env/", printenvvar).Methods("GET")
@@ -108,6 +112,7 @@ func returnCurrentDirectoryListing(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pe)
 }
 
+/*
 func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
 
@@ -119,6 +124,71 @@ func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 		print("!!!!!!!!!!!!!!")
 	} else {
 		json.NewEncoder(w).Encode(pe)
+	}
+
+}*/
+
+func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
+	key := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
+
+	key = strings.TrimSuffix(key, "\\")
+
+	//if key == "" {
+	//	key = "."
+	//}
+
+	fmt.Println("Endpoint Hit: returnDirectoryListingAtPath=" + key)
+	wd, _ := os.Getwd()
+
+	fmt.Println("Current workdir=" + wd)
+
+	var entries []pathEntryDetails
+	//pe, err := specificDirStat(key)
+
+	tmpDir := key
+	//os.Chdir(tmpDir)
+	//fmt.Println(syscall.Chdir(tmpDir))
+	//err :=
+
+	if syscall.Chdir(tmpDir) != nil {
+		pathnotFound(w, r)
+		return
+	}
+
+	wd, _ = os.Getwd()
+	fmt.Println("Current workdir2=" + wd)
+
+	fmt.Println("")
+	err := filepath.Walk(".", func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			fmt.Printf("prevent panic by handling failure accessing a path %q: %v\n", path, err)
+			return err
+		}
+		if info.IsDir() {
+
+		} else {
+
+		}
+		fmt.Printf("visited file or dir: %q %q\n", wd, path)
+		entry, err := specificDirStat(path)
+		if err != nil {
+			fmt.Printf("error walking the path %q: %v\n", tmpDir, err)
+			return err
+		}
+		entries = append(entries, entry)
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("error walking the path %q: %v\n", tmpDir, err)
+		return
+	}
+
+	fmt.Println(syscall.Chdir(originalRootDir))
+
+	if err != nil {
+		print("!!!!!!!!!!!!!!")
+	} else {
+		json.NewEncoder(w).Encode(entries)
 	}
 
 }
@@ -156,23 +226,27 @@ func fileStat(path string) (pathEntryDetails, error) {
 		return details, err
 	}
 
-	fmt.Println("File Name:", fileStat.Name())       // Base name of the file
+	fmt.Print("File Name:", fileStat.Name())         // Base name of the file
 	fmt.Print(" Size:", fileStat.Size())             // Length in bytes for regular files
 	fmt.Print(" Permissions:", fileStat.Mode())      // File mode bits
 	fmt.Print(" Last Modified:", fileStat.ModTime()) // Last modification time
-	fmt.Print(" Is Directory: ", fileStat.IsDir())
+	fmt.Println(" Is Directory: ", fileStat.IsDir())
 
-	details.Filename = fileStat.Name()
+	wd, _ := os.Getwd()
+
+	details.Path = wd + "\\" + path
+	details.IsDir = fileStat.IsDir()
+	details.Name = fileStat.Name()
+	details.Permissions = fileStat.Mode().String()
 	details.Size = fileStat.Size()
 	details.LastMod = fileStat.ModTime()
-	details.IsDir = fileStat.IsDir()
-	details.Permissions = fileStat.Mode().String()
-	details.Path = path
 
 	return details, nil
 }
 
 func main() {
+	wd, _ := os.Getwd()
+	originalRootDir = wd
 	//fmt.Println("Application started.\nVersion=" + os.Getenv("VERSION"))
 	fmt.Println(time.Now().String() + ": Application started.\nVersion=1.0")
 
