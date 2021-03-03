@@ -99,10 +99,14 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(failed)
 }
 
-func pathnotFound(w http.ResponseWriter, r *http.Request) {
+func pathNotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusBadRequest)
 	io.WriteString(w, "Specified path not found")
-	//http.ServeFile(w, r, "public/index.html")
+}
+
+func errorWhileReadingPath(w http.ResponseWriter, r *http.Request, err error) {
+	w.WriteHeader(http.StatusBadRequest)
+	io.WriteString(w, "Unexpected error occurred during operation:"+err.Error())
 }
 
 func returnCurrentDirectoryListing(w http.ResponseWriter, r *http.Request) {
@@ -131,11 +135,10 @@ func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
 
-	key = strings.TrimSuffix(key, "\\")
-
-	//if key == "" {
-	//	key = "."
-	//}
+	if key == "" {
+		key = "."
+		fmt.Println("Key was empty, now set to dot " + key)
+	}
 
 	fmt.Println("Endpoint Hit: returnDirectoryListingAtPath=" + key)
 	wd, _ := os.Getwd()
@@ -151,7 +154,7 @@ func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 	//err :=
 
 	if syscall.Chdir(tmpDir) != nil {
-		pathnotFound(w, r)
+		pathNotFound(w, r)
 		return
 	}
 
@@ -178,15 +181,15 @@ func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, entry)
 		return nil
 	})
+	fmt.Println(syscall.Chdir(originalRootDir))
 	if err != nil {
 		fmt.Printf("error walking the path %q: %v\n", tmpDir, err)
+		errorWhileReadingPath(w, r, err)
 		return
 	}
 
-	fmt.Println(syscall.Chdir(originalRootDir))
-
 	if err != nil {
-		print("!!!!!!!!!!!!!!")
+		fmt.Printf("Erroar hear: %v", err)
 	} else {
 		json.NewEncoder(w).Encode(entries)
 	}
