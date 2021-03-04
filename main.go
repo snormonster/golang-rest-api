@@ -208,7 +208,7 @@ func initCloseHandler() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		handleLogging("\rApp stopped unexpected externally, will cleanup and exit", "WARN")
+		handleLogging("App stopped unexpected externally, will cleanup and exit", "WARN")
 		cleanUp("external")
 		os.Exit(0)
 	}()
