@@ -41,18 +41,27 @@ var lastActivity time.Time
 var originalWorkDir string
 var file os.File
 
-//var fileLog file
+func main() {
+	initCloseHandler()
+	initLogger()
+	handleLogging("Application started.", "INFO")
 
-func homePage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to the HomePage!")
-	handleLogging("Hit endpoint: homePage", "DEBUG")
+	wd, _ := os.Getwd()
+	originalWorkDir = wd
+
+	if runtime.GOOS == "windows" {
+		PathSeparator = "\\"
+	} else {
+		PathSeparator = "/"
+	}
+
+	handleRequests()
+	cleanUp("main")
 }
 
 func handleRequests() {
 	myRouter := mux.NewRouter().StrictSlash(true)
-
 	myRouter.Use(CORS)
-
 	myRouter.HandleFunc("/", homePage)
 	myRouter.HandleFunc("/ls", returnDirectoryListingAtPath).Queries("path", "").Methods("GET")
 	myRouter.HandleFunc("/health", healthCheck).Methods("GET")
@@ -62,6 +71,11 @@ func handleRequests() {
 
 	lastActivity = time.Now() // set timestamp before getting blocked by ListenAndServe
 	log.Fatal(http.ListenAndServe(":8080", myRouter))
+}
+
+func homePage(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Welcome to the HomePage!")
+	handleLogging("Hit endpoint: homePage", "DEBUG")
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +119,7 @@ func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 	var entries []PathEntryDetails
 	tmpDir := specifiedPath
 
-	// quick and dirty check to see if path exists
+	// quick check to see if path exists
 	if syscall.Chdir(tmpDir) != nil {
 		pathNotFound(w, r)
 		return
@@ -136,7 +150,6 @@ func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 	} else {
 		json.NewEncoder(w).Encode(entries)
 	}
-
 }
 
 func getFileInformation(path string) (PathEntryDetails, error) {
@@ -156,7 +169,6 @@ func getFileInformation(path string) (PathEntryDetails, error) {
 
 	details.Fullpath = wd + PathSeparator + path
 	details.IsDir = fileStat.IsDir()
-
 	details.Permissions = fileStat.Mode().String()
 	details.Size = fileStat.Size()
 	details.LastMod = fileStat.ModTime()
@@ -171,25 +183,6 @@ func getFileInformation(path string) (PathEntryDetails, error) {
 	}
 
 	return details, nil
-}
-
-func main() {
-	initCloseHandler()
-	initLogger()
-	handleLogging("Application started. Version="+os.Getenv("VERSION"), "INFO")
-
-	wd, _ := os.Getwd()
-	originalWorkDir = wd
-
-	if runtime.GOOS == "windows" {
-		PathSeparator = "\\"
-	} else {
-		PathSeparator = "/"
-	}
-
-	handleRequests()
-	//fmt.Println("Listening on container port" + os.Getenv("LOCAL_PORT"))
-	cleanUp("main")
 }
 
 // CORS Middleware
@@ -213,7 +206,6 @@ func CORS(next http.Handler) http.Handler {
 func initCloseHandler() {
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
 	go func() {
 		<-c
 		handleLogging("\rApp stopped unexpected externally, will cleanup and exit", "WARN")
@@ -229,7 +221,6 @@ func cleanUp(str string) {
 
 func initLogger() {
 	file, err := os.OpenFile("logfile.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-
 	if err != nil {
 		log.Fatal(err)
 	}

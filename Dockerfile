@@ -2,8 +2,7 @@
 ## go application
 FROM golang:alpine as build-env
 
-#uncommented because it gave me issues on Raspberry Pi
-#RUN apk update && apk add --no-cache git
+RUN apk update && apk add --no-cache git
 
 ENV VERSION=1.0
 ENV LOCAL_PORT=8080

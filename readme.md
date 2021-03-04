@@ -62,7 +62,7 @@ To run the program run in a Docker container is very simple, after building the 
 docker run --rm -p 8080:8080 -e "NODEBUG=false" -it rest-api
 
 ```
-The NODEBUG environment variable can be set to true if less debug messages in the log file and Docker terminal is desired.
+The NODEBUG environment variable can be set to true if less debug messages in the log file and Docker terminal is desired (it can also be omitted entirely).
 
 ## API usage
 Once the API is started it will post a brief message in the Docker terminal to show that it was started and on which port it listens (inside the container). 
