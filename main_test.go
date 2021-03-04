@@ -26,24 +26,9 @@ func TestGetPath(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusOK)
 	}
-
-	var decoded []interface{}
-	err = json.NewDecoder(rr.Body).Decode(&decoded)
-	response := decoded[0].(PathEntryDetails)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected := "."
-	if response.Name != expected {
-		t.Errorf("handler returned unexpected body: got %v", decoded[12])
-	}
 }
 
-// klaar
 func TestHealthEndpoint(t *testing.T) {
-
 	req, err := http.NewRequest("GET", "/health", nil)
 
 	if err != nil {
@@ -55,10 +40,6 @@ func TestHealthEndpoint(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	checkResponseCode(t, http.StatusOK, rr.Code)
-	/*
-		if status := rr.Code; status != http.StatusOK {
-			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
-		}*/
 
 	var response HealthResponse
 	json.Unmarshal(rr.Body.Bytes(), &response)

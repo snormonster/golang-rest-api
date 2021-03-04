@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -38,12 +38,14 @@ type HealthResponse struct {
 // PathSeparator has to be dynamically set
 var PathSeparator string
 var lastActivity time.Time
-var originalRootDir string
+var originalWorkDir string
+var file os.File
+
+//var fileLog file
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the HomePage!")
-	fmt.Println("Endpoint Hit: homePage")
-
+	handleLogging("Hit endpoint: homePage", "DEBUG")
 }
 
 func handleRequests() {
@@ -52,25 +54,19 @@ func handleRequests() {
 	myRouter.Use(CORS)
 
 	myRouter.HandleFunc("/", homePage)
-	myRouter.HandleFunc("/ls/", returnDirectoryListingAtPath).Queries("path", "").Methods("GET")
-	myRouter.HandleFunc("/ls/", returnDirectoryListingAtPath)
-	//myRouter.HandleFunc("/article/", returnSingleArticle).Methods("GET").Queries("foo", "bar", "id", "{id:[0-9]+}")
-	myRouter.HandleFunc("/test/", printpathtest).Queries("foo", "").Methods("GET")
-	myRouter.HandleFunc("/env/", printenvvar).Methods("GET")
+	myRouter.HandleFunc("/ls", returnDirectoryListingAtPath).Queries("path", "").Methods("GET")
 	myRouter.HandleFunc("/health", healthCheck).Methods("GET")
 	myRouter.NotFoundHandler = http.HandlerFunc(unexpectedRoute)
 
-	// finally, instead of passing in nil, we want
-	// to pass in our newly created router as the second
-	// argument
-	//log.Fatal(http.ListenAndServe(":"+os.Getenv("LOCAL_PORT"), myRouter))
-	fmt.Println("Starting web service API on local port 10000")
-	//fmt.Println("Starting web service API on local port" + os.Getenv("LOCAL_PORT")
-	lastActivity = time.Now()
-	log.Fatal(http.ListenAndServe(":10000", myRouter))
+	handleLogging("Starting web service API on local port: 8080", "INFO")
+
+	lastActivity = time.Now() // set timestamp before getting blocked by ListenAndServe
+	log.Fatal(http.ListenAndServe(":8080", myRouter))
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
+	handleLogging("Hit endpoint: healthCheck", "DEBUG")
+
 	var health HealthResponse
 	health.CurrentTime = time.Now()
 	health.Status = "OK"
@@ -83,9 +79,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 
 func unexpectedRoute(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
-
 	io.WriteString(w, "Invalid, unknown, or unauthorized API call")
-
 }
 
 func pathNotFound(w http.ResponseWriter, r *http.Request) {
@@ -95,119 +89,69 @@ func pathNotFound(w http.ResponseWriter, r *http.Request) {
 
 func errorWhileReadingPath(w http.ResponseWriter, r *http.Request, err error) {
 	w.WriteHeader(http.StatusBadRequest)
-	io.WriteString(w, "Unexpected error occurred during operation:"+err.Error())
-}
-
-func returnCurrentDirectoryListing(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: returnCurrentDirectoryListing")
-	var pe PathEntryDetails
-	pe, _ = currentDirStat()
-	json.NewEncoder(w).Encode(pe)
+	io.WriteString(w, "Unexpected error occurred during operation: "+err.Error())
 }
 
 func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
-	key := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
+	specifiedPath := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
 
-	if key == "" {
-		key = "."
-		fmt.Println("Key was empty, now set to dot " + key)
+	handleLogging("Hit endpoint: returnDirectoryListingAtPath="+specifiedPath, "DEBUG")
+
+	// if no explicit path is specified, set to relative root
+	if specifiedPath == "" {
+		specifiedPath = "."
 	}
 
-	fmt.Println("Endpoint Hit: returnDirectoryListingAtPath=" + key)
-	wd, _ := os.Getwd()
-
-	fmt.Println("Current workdir=" + wd)
-
 	var entries []PathEntryDetails
-	//pe, err := specificDirStat(key)
+	tmpDir := specifiedPath
 
-	tmpDir := key
-	//os.Chdir(tmpDir)
-	//fmt.Println(syscall.Chdir(tmpDir))
-	//err :=
-
+	// quick and dirty check to see if path exists
 	if syscall.Chdir(tmpDir) != nil {
 		pathNotFound(w, r)
 		return
 	}
 
-	wd, _ = os.Getwd()
-	fmt.Println("Current workdir2=" + wd)
-
-	fmt.Println("")
 	err := filepath.Walk(".", func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
-			fmt.Printf("prevent panic by handling failure accessing a path %q: %v\n", path, err)
+			handleLogging("Failure accessing a path="+path+" error="+err.Error(), "ERROR")
 			return err
 		}
-		if info.IsDir() {
 
-		} else {
+		entry, err := getFileInformation(path)
 
-		}
-		fmt.Printf("visited file or dir: %q %q\n", wd, path)
-		entry, err := specificDirStat(path)
 		if err != nil {
-			fmt.Printf("error walking the path %q: %v\n", tmpDir, err)
+			handleLogging("Error accessing path="+path+" error="+err.Error(), "ERROR")
 			return err
 		}
+
 		entries = append(entries, entry)
 		return nil
 	})
-	fmt.Println(syscall.Chdir(originalRootDir))
-	if err != nil {
-		fmt.Printf("error walking the path %q: %v\n", tmpDir, err)
-		errorWhileReadingPath(w, r, err)
-		return
-	}
+
+	syscall.Chdir(originalWorkDir)
 
 	if err != nil {
-		fmt.Printf("Erroar hear: %v", err)
+		handleLogging("Error while building directory listing, error="+err.Error(), "ERROR")
+		errorWhileReadingPath(w, r, err)
 	} else {
 		json.NewEncoder(w).Encode(entries)
 	}
 
 }
 
-func printpathtest(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: printpathtest")
-	//json.NewEncoder(w).Encode(r.URL.Query().Get("foo"))
-	io.WriteString(w, "default")
-}
-
-func printenvvar(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: printenvvar")
-	//json.NewEncoder(w).Encode(r.URL.Query().Get("foo"))
-	io.WriteString(w, os.Getenv("env"))
-}
-
-func currentDirStat() (PathEntryDetails, error) {
-	return fileStat(".")
-}
-
-func specificDirStat(str string) (PathEntryDetails, error) {
-	return fileStat(str)
-}
-
-func fileStat(path string) (PathEntryDetails, error) {
+func getFileInformation(path string) (PathEntryDetails, error) {
 	var details PathEntryDetails
 
 	fileStat, err := os.Stat(path)
 
 	if err != nil {
 		if os.IsNotExist(err) {
-			return details, fmt.Errorf("File or folder does not exist") //	"Folder does not exist"
+			return details, fmt.Errorf("File or folder does not exist")
 		}
 		log.Panic(err)
 		return details, err
 	}
-	/*
-		fmt.Print("File Name:", fileStat.Name())         // Base name of the file
-		fmt.Print(" Size:", fileStat.Size())             // Length in bytes for regular files
-		fmt.Print(" Permissions:", fileStat.Mode())      // File mode bits
-		fmt.Print(" Last Modified:", fileStat.ModTime()) // Last modification time
-		fmt.Println(" Is Directory: ", fileStat.IsDir())
-	*/
+
 	wd, _ := os.Getwd()
 
 	details.Fullpath = wd + PathSeparator + path
@@ -217,6 +161,7 @@ func fileStat(path string) (PathEntryDetails, error) {
 	details.Size = fileStat.Size()
 	details.LastMod = fileStat.ModTime()
 
+	// fileStat returns '.' for folder names, give proper name instead
 	if fileStat.Name() != "." {
 		details.Name = fileStat.Name()
 	} else {
@@ -229,8 +174,13 @@ func fileStat(path string) (PathEntryDetails, error) {
 }
 
 func main() {
+	//fmt.Println("Application started.\nVersion=" + os.Getenv("VERSION"))
+	initCloseHandler()
+	initLogger()
+	handleLogging("Application started. Version="+os.Getenv("VERSION"), "INFO")
+
 	wd, _ := os.Getwd()
-	originalRootDir = wd
+	originalWorkDir = wd
 
 	if runtime.GOOS == "windows" {
 		PathSeparator = "\\"
@@ -238,12 +188,9 @@ func main() {
 		PathSeparator = "/"
 	}
 
-	//fmt.Println("Application started.\nVersion=" + os.Getenv("VERSION"))
-	fmt.Println(time.Now().String() + ": Application started.\nVersion=1.0")
-
 	handleRequests()
 	//fmt.Println("Listening on container port" + os.Getenv("LOCAL_PORT"))
-
+	cleanUp("main")
 }
 
 // CORS Middleware
@@ -262,4 +209,43 @@ func CORS(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		return
 	})
+}
+
+func initCloseHandler() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-c
+		handleLogging("\rApp stopped unexpected externally, will cleanup and exit", "WARN")
+		cleanUp("external")
+		os.Exit(0)
+	}()
+}
+
+func cleanUp(str string) {
+	handleLogging("Application stopped from "+str, "DEBUG")
+	file.Close()
+}
+
+func initLogger() {
+	file, err := os.OpenFile("logfile.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.SetOutput(file)
+}
+
+func handleLogging(msg, level string) {
+	log.Print(level + " " + msg)
+
+	if level == "DEBUG" {
+		if os.Getenv("NODEBUG") != "true" {
+			fmt.Println(msg)
+		}
+	} else {
+		fmt.Println(msg)
+	}
 }

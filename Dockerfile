@@ -5,7 +5,7 @@ FROM golang:alpine as build-env
 RUN apk update && apk add --no-cache git
 
 ENV VERSION=1.0
-ENV LOCAL_PORT=10000
+ENV LOCAL_PORT=8080
 
 ## We create an /app directory within our
 ## image that will hold our application source
