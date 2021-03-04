@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+
 	"log"
 	"net/http"
 	"os"
@@ -33,7 +34,7 @@ type failedResponse struct {
 	Error   string `json:"error"`
 }
 
-type healthResponse struct {
+type HealthResponse struct {
 	Status                string    `json:"status"`
 	CurrentTime           time.Time `json:"timestamp"`
 	LastActivityTimestamp time.Time `json:"lastactivity"`
@@ -74,7 +75,7 @@ func handleRequests() {
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
-	var health healthResponse
+	var health HealthResponse
 	health.CurrentTime = time.Now()
 	health.Status = "OK"
 	health.LastActivityTimestamp = lastActivity
@@ -230,21 +231,29 @@ func fileStat(path string) (pathEntryDetails, error) {
 		log.Panic(err)
 		return details, err
 	}
-
-	fmt.Print("File Name:", fileStat.Name())         // Base name of the file
-	fmt.Print(" Size:", fileStat.Size())             // Length in bytes for regular files
-	fmt.Print(" Permissions:", fileStat.Mode())      // File mode bits
-	fmt.Print(" Last Modified:", fileStat.ModTime()) // Last modification time
-	fmt.Println(" Is Directory: ", fileStat.IsDir())
-
+	/*
+		fmt.Print("File Name:", fileStat.Name())         // Base name of the file
+		fmt.Print(" Size:", fileStat.Size())             // Length in bytes for regular files
+		fmt.Print(" Permissions:", fileStat.Mode())      // File mode bits
+		fmt.Print(" Last Modified:", fileStat.ModTime()) // Last modification time
+		fmt.Println(" Is Directory: ", fileStat.IsDir())
+	*/
 	wd, _ := os.Getwd()
 
 	details.Fullpath = wd + pathSeparator + path
 	details.IsDir = fileStat.IsDir()
-	details.Name = fileStat.Name()
+
 	details.Permissions = fileStat.Mode().String()
 	details.Size = fileStat.Size()
 	details.LastMod = fileStat.ModTime()
+
+	if fileStat.Name() != "." {
+		details.Name = fileStat.Name()
+	} else {
+		elements := strings.SplitAfter(wd, pathSeparator)
+		lastElement := elements[len(elements)-1]
+		details.Name = lastElement
+	}
 
 	return details, nil
 }
@@ -255,6 +264,8 @@ func main() {
 
 	if runtime.GOOS == "windows" {
 		pathSeparator = "\\"
+	} else {
+		pathSeparator = "/"
 	}
 
 	//fmt.Println("Application started.\nVersion=" + os.Getenv("VERSION"))
