@@ -5,35 +5,43 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/gorilla/mux"
 )
 
-func TestGetEntryByID(t *testing.T) {
-
+func TestGetPath(t *testing.T) {
+	PathSeparator = "\\"
 	req, err := http.NewRequest("GET", "/ls/", nil)
+
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	q := req.URL.Query()
-	q.Add("path", "/")
+	q.Add("path", "")
 	req.URL.RawQuery = q.Encode()
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(returnDirectoryListingAtPath)
 	handler.ServeHTTP(rr, req)
+
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusOK)
 	}
 
-	// Check the response body is what we expect.
-	expected := `{"id":1,"first_name":"Krish","last_name":"Bhanushali","email_address":"krishsb2405@gmail.com","phone_number":"0987654321"}`
-	if rr.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			rr.Body.String(), expected)
+	var decoded []interface{}
+	err = json.NewDecoder(rr.Body).Decode(&decoded)
+	response := decoded[0].(PathEntryDetails)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := "."
+	if response.Name != expected {
+		t.Errorf("handler returned unexpected body: got %v", decoded[12])
 	}
 }
 
+// klaar
 func TestHealthEndpoint(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/health", nil)
@@ -46,58 +54,69 @@ func TestHealthEndpoint(t *testing.T) {
 	handler := http.HandlerFunc(healthCheck)
 	handler.ServeHTTP(rr, req)
 
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
+	checkResponseCode(t, http.StatusOK, rr.Code)
+	/*
+		if status := rr.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
+		}*/
 
-	var resp HealthResponse
-	json.Unmarshal(rr.Body.Bytes(), &resp)
+	var response HealthResponse
+	json.Unmarshal(rr.Body.Bytes(), &response)
 
 	expected := "OK"
-	if resp.Status != expected {
-		t.Errorf("Health endpoint returned unexpected body or status: got %v want %v",
-			rr.Body.String(), expected)
+	if response.Status != expected {
+		t.Errorf("Health endpoint returned an unexpected body or status: got %v want %v", rr.Body.String(), expected)
 	}
 }
 
-func executeRequest(req *http.Request) *httptest.ResponseRecorder {
-	rr := httptest.NewRecorder()
-	mux.NewRouter().ServeHTTP(rr, req)
+func TestPathNotFound(t *testing.T) {
+	PathSeparator = "\\"
+	req, err := http.NewRequest("GET", "/ls/", nil)
 
-	return rr
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := req.URL.Query()
+	q.Add("path", "asdjmlk123l1n34lknasd")
+	req.URL.RawQuery = q.Encode()
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(returnDirectoryListingAtPath)
+	handler.ServeHTTP(rr, req)
+
+	//if status := rr.Code; status != http.StatusBadRequest {
+	//	t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
+	//}
+
+	checkResponseCode(t, http.StatusBadRequest, rr.Code)
+
+	expected := "Specified path not found"
+	if rr.Body.String() != expected {
+		t.Errorf("Health endpoint returned an unexpected body or status: got %v want %v", rr.Body.String(), expected)
+	}
+}
+
+func TestErroneusRoute(t *testing.T) {
+	req, err := http.NewRequest("GET", "/unknown", nil)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(unexpectedRoute)
+	handler.ServeHTTP(rr, req)
+
+	checkResponseCode(t, http.StatusNotFound, rr.Code)
+
+	expected := "Invalid, unknown, or unauthorized API call"
+	if rr.Body.String() != expected {
+		t.Errorf("Health endpoint returned an unexpected body: got %v want %v", rr.Body.String(), expected)
+	}
 }
 
 func checkResponseCode(t *testing.T, expected, actual int) {
 	if expected != actual {
-		t.Errorf("Expected response code %d. Got %d\n", expected, actual)
-	}
-}
-
-func TestGetProduct(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/test/?foo=bar", nil)
-	response := executeRequest(req)
-
-	checkResponseCode(t, http.StatusOK, response.Code)
-}
-
-func TestGetEntries(t *testing.T) {
-	req, err := http.NewRequest("POST", "/test/?foso=bar", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(printpathtest)
-	handler.ServeHTTP(rr, req)
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-
-	// Check the response body is what we expect.
-	expected := "default"
-	if rr.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			rr.Body.String(), expected)
+		t.Errorf("Expected HTTP response code %d. Got %d\n", expected, actual)
 	}
 }

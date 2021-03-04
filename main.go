@@ -18,8 +18,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Pathentry to store file/folder attributes
-type pathEntryDetails struct {
+// PathEntryDetails to store file/folder attributes
+type PathEntryDetails struct {
 	Fullpath    string    `json:"path"`
 	IsDir       bool      `json:"isdirectory"`
 	Name        string    `json:"name"`
@@ -28,21 +28,17 @@ type pathEntryDetails struct {
 	LastMod     time.Time `json:"lastmodified"`
 }
 
-type failedResponse struct {
-	Method  string `json:"method"`
-	Request string `json:"request"`
-	Error   string `json:"error"`
-}
-
+// HealthResponse stores simple health check values
 type HealthResponse struct {
 	Status                string    `json:"status"`
 	CurrentTime           time.Time `json:"timestamp"`
 	LastActivityTimestamp time.Time `json:"lastactivity"`
 }
 
+// PathSeparator has to be dynamically set
+var PathSeparator string
 var lastActivity time.Time
 var originalRootDir string
-var pathSeparator string
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the HomePage!")
@@ -62,7 +58,7 @@ func handleRequests() {
 	myRouter.HandleFunc("/test/", printpathtest).Queries("foo", "").Methods("GET")
 	myRouter.HandleFunc("/env/", printenvvar).Methods("GET")
 	myRouter.HandleFunc("/health", healthCheck).Methods("GET")
-	myRouter.NotFoundHandler = http.HandlerFunc(notFound)
+	myRouter.NotFoundHandler = http.HandlerFunc(unexpectedRoute)
 
 	// finally, instead of passing in nil, we want
 	// to pass in our newly created router as the second
@@ -85,21 +81,11 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(health)
 }
 
-func notFound(w http.ResponseWriter, r *http.Request) {
+func unexpectedRoute(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 
-	var failed failedResponse
+	io.WriteString(w, "Invalid, unknown, or unauthorized API call")
 
-	failed.Error = "Invalid API call"
-
-	if r.Method != "GET" {
-		failed.Error = "Invalid HTTP Method"
-	}
-
-	failed.Method = r.Method
-	failed.Request = ""
-
-	json.NewEncoder(w).Encode(failed)
 }
 
 func pathNotFound(w http.ResponseWriter, r *http.Request) {
@@ -114,26 +100,10 @@ func errorWhileReadingPath(w http.ResponseWriter, r *http.Request, err error) {
 
 func returnCurrentDirectoryListing(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Endpoint Hit: returnCurrentDirectoryListing")
-	var pe pathEntryDetails
+	var pe PathEntryDetails
 	pe, _ = currentDirStat()
 	json.NewEncoder(w).Encode(pe)
 }
-
-/*
-func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
-	key := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
-
-	fmt.Println("Endpoint Hit: returnDirectoryListingAtPath=" + key)
-	var pe pathEntryDetails
-	pe, err := specificDirStat(key)
-
-	if err != nil {
-		print("!!!!!!!!!!!!!!")
-	} else {
-		json.NewEncoder(w).Encode(pe)
-	}
-
-}*/
 
 func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
@@ -148,7 +118,7 @@ func returnDirectoryListingAtPath(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("Current workdir=" + wd)
 
-	var entries []pathEntryDetails
+	var entries []PathEntryDetails
 	//pe, err := specificDirStat(key)
 
 	tmpDir := key
@@ -211,16 +181,16 @@ func printenvvar(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, os.Getenv("env"))
 }
 
-func currentDirStat() (pathEntryDetails, error) {
+func currentDirStat() (PathEntryDetails, error) {
 	return fileStat(".")
 }
 
-func specificDirStat(str string) (pathEntryDetails, error) {
+func specificDirStat(str string) (PathEntryDetails, error) {
 	return fileStat(str)
 }
 
-func fileStat(path string) (pathEntryDetails, error) {
-	var details pathEntryDetails
+func fileStat(path string) (PathEntryDetails, error) {
+	var details PathEntryDetails
 
 	fileStat, err := os.Stat(path)
 
@@ -240,7 +210,7 @@ func fileStat(path string) (pathEntryDetails, error) {
 	*/
 	wd, _ := os.Getwd()
 
-	details.Fullpath = wd + pathSeparator + path
+	details.Fullpath = wd + PathSeparator + path
 	details.IsDir = fileStat.IsDir()
 
 	details.Permissions = fileStat.Mode().String()
@@ -250,7 +220,7 @@ func fileStat(path string) (pathEntryDetails, error) {
 	if fileStat.Name() != "." {
 		details.Name = fileStat.Name()
 	} else {
-		elements := strings.SplitAfter(wd, pathSeparator)
+		elements := strings.SplitAfter(wd, PathSeparator)
 		lastElement := elements[len(elements)-1]
 		details.Name = lastElement
 	}
@@ -263,9 +233,9 @@ func main() {
 	originalRootDir = wd
 
 	if runtime.GOOS == "windows" {
-		pathSeparator = "\\"
+		PathSeparator = "\\"
 	} else {
-		pathSeparator = "/"
+		PathSeparator = "/"
 	}
 
 	//fmt.Println("Application started.\nVersion=" + os.Getenv("VERSION"))
