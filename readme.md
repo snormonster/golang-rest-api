@@ -23,12 +23,14 @@ https://docs.docker.com/get-docker/
 The project repo can easily be cloned, for example
 
 ```git
-git clone https://github.com/snormonster/temp.git  
+git clone https://github.com/snormonster/golang-rest-api.git  
 ```
 
 All the required files are in the project folder.
 
 ## Compiling the program
+*(This section can be skipped and is not necessary to build a docker image)*
+
 To build the app to an executable, run the following command in the root directory
 
 ```go
@@ -50,14 +52,14 @@ go mod download github.com/gorilla/mux
 The project includes a Dockerfile to get started. 
 The Docker build can be kicked of by running the following example:
 ```docker
-docker build -t restful-api .
+docker build -t rest-api .
 ```
 The program will be placed in a folder called /app/, more on this later.
 
 ## Running in Docker container
 To run the program run in a Docker container is very simple, after building the Image the following command will start it up. However, consider removing the --rm flag to not let Docker automatically clean up the container after it exits.
 ```docker
-docker run --rm -p 8080:8080 -e "NODEBUG=false" -it restful-api
+docker run --rm -p 8080:8080 -e "NODEBUG=false" -it rest-api
 
 ```
 The NODEBUG environment variable can be set to true if less debug messages in the log file and Docker terminal is desired.
@@ -80,7 +82,7 @@ The path specified above will serve as a good example for the service running in
 Another thing to mention is that the path specified /app/ etc. is a relative path, however a full path can also be entered. For example on windows the following returned a valid result:
 
 ```bash
-curl http://localhost:10000/ls?path=C:\Users\pierre\Documents\GitHub\temp
+curl http://localhost:10000/ls?path=C:\Users\pierre\Documents\GitHub\golang-rest-api
 ```
 
 Note: back slashes as well as forward slashes can be used in the path only where the program is running on a windows system, all others shall only permit forward slashes. Also note that the relative path is relative to the app/working directory.
@@ -93,7 +95,7 @@ For any other undefined API calls a HTTP code 404 will be returned in the header
 
 **Simple health check**
 ```bash
-http://IP_ADDRESS:8080/health
+http://IP_ADDRESS:PORT/health
 ```
 This will return a json string with a status:OK, timestamp of the request, and another timestamp of the last server activity.
 
