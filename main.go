@@ -174,7 +174,6 @@ func getFileInformation(path string) (PathEntryDetails, error) {
 }
 
 func main() {
-	//fmt.Println("Application started.\nVersion=" + os.Getenv("VERSION"))
 	initCloseHandler()
 	initLogger()
 	handleLogging("Application started. Version="+os.Getenv("VERSION"), "INFO")
