@@ -40,6 +40,11 @@ Otherwise, to simply run the program
 go run main.go
 ```
 
+There is a possibility that Go will prompt the user to run a command to get a dependency, this is from a well-known repo on GitHub and should be executed without too much concern 
+
+```go
+go mod download github.com/gorilla/mux
+```
 
 ## Building Docker Image
 The project includes a Dockerfile to get started. 
